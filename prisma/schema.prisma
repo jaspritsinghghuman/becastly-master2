@@ -1,0 +1,953 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== CORE MODELS & MULTI-TENANCY ====================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       User[]
+  contacts    Contact[]
+  campaigns   Campaign[]
+  messages    Message[]
+  integrations Integration[]
+  apiKeys     ApiKey[]
+  aiSettings  AISettings[]
+  leadScores  LeadScore[]
+  conversations Conversation[]
+  dripCampaigns DripCampaign[]
+  leadCaptureForms LeadCaptureForm[]
+  voiceCalls  VoiceCall[]
+  templates   Template[]
+  usageRecords UsageRecord[]
+  analyticsEvents AnalyticsEvent[]
+  paymentIntents PaymentIntent[]
+  subscriptions Subscription[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  tenantId     String
+  email        String        @unique
+  passwordHash String
+  name         String?
+  plan         Plan          @default(FREE)
+  dailyQuota   Int           @default(100)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  // Relations
+  contacts     Contact[]
+  campaigns    Campaign[]
+  apiKeys      ApiKey[]
+  integrations Integration[]
+  sessions     Session[]
+  
+  // AI & Automation
+  aiSettings   AISettings?
+  leadScores   LeadScore[]
+  conversations Conversation[]
+  dripCampaigns DripCampaign[]
+  templates    Template[]
+  
+  // Team & Collaboration
+  ownedTeams   Team[]        @relation("TeamOwner")
+  teamMemberships TeamMember[]
+  
+  // White-label (Agency)
+  whiteLabel   WhiteLabelConfig?
+  
+  // Analytics
+  usageRecords UsageRecord[]
+  
+  // Billing
+  subscription Subscription?
+  
+  // Admin
+  adminActions AdminAction[] @relation("AdminActions")
+
+  // Tenant
+  tenant       Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(references: id, fields: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Contact {
+  id          String        @id @default(cuid())
+  tenantId    String
+  userId      String
+  name        String?
+  phone       String? // E.164 format
+  email       String?
+  telegramId  String?
+  tags        String[]
+  status      ContactStatus @default(ACTIVE)
+  source      String?       // lead capture source
+  metadata    String?       // JSON - additional data
+  lastContactAt DateTime?
+  createdAt   DateTime      @default(now())
+  
+  // Lead Scoring
+  leadScore   LeadScore?
+  
+  // Relations
+  tenant      Organization  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  conversations Conversation[]
+  dripMessages DripMessage[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("contacts")
+}
+
+model Campaign {
+  id           String          @id @default(cuid())
+  tenantId     String
+  userId       String
+  name         String
+  channel      Channel
+  status       CampaignStatus  @default(DRAFT)
+  template     String // "Hi {name}!"
+  subject      String? // For email
+  tagFilter    String[] // Target tags
+  scheduleType ScheduleType    @default(IMMEDIATE)
+  scheduledAt  DateTime?
+  dailyLimit   Int             @default(50)
+  minDelay     Int             @default(30)
+  maxDelay     Int             @default(120)
+  sentCount    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  
+  // Relations
+  tenant       Organization    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     Message[]
+
+  @@index([tenantId])
+  @@map("campaigns")
+}
+
+model Message {
+  id            String        @id @default(cuid())
+  tenantId      String
+  campaignId    String
+  contactId     String
+  channel       Channel
+  content       String
+  status        MessageStatus @default(PENDING)
+  externalId    String? // WhatsApp wamid, Twilio SID
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  failedAt      DateTime?
+  errorMessage  String?
+  replyReceived Boolean       @default(false)
+  retryCount    Int           @default(0)
+  
+  // AI Features
+  aiGenerated   Boolean       @default(false)
+  aiContext     String?       // JSON - AI conversation context
+  
+  // Relations
+  tenant       Organization   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign      Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact       Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([campaignId])
+  @@index([contactId])
+  @@map("messages")
+}
+
+model Integration {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  channel   Channel
+  provider  String // whatsapp_cloud, twilio, telegram_bot, smtp
+  config    String // Encrypted JSON string
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  // Relations
+  tenant    Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@unique([userId, channel, provider])
+  @@map("integrations")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  name        String
+  keyHash     String // SHA-256
+  permissions String[] // ["send:whatsapp"]
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  tenant      Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+// ==================== AI & AUTOMATION ====================
+
+model AISettings {
+  id                String    @id @default(cuid())
+  tenantId          String
+  userId            String    @unique
+  
+  // Provider Settings
+  provider          AIProvider @default(OPENAI)
+  openaiKey         String?   // Encrypted
+  openaiModel       String    @default("gpt-4o-mini")
+  ollamaUrl         String?   @default("http://localhost:11434")
+  ollamaModel       String?   @default("llama3.2")
+  
+  // Feature Toggles
+  enableLeadCapture Boolean   @default(true)
+  enableLeadScoring Boolean   @default(true)
+  enableWhatsAppAI  Boolean   @default(false)
+  enableVoiceAI     Boolean   @default(false)
+  enableAutoRevive  Boolean   @default(false)
+  
+  // AI Configuration
+  temperature       Float     @default(0.7)
+  maxTokens         Int       @default(500)
+  systemPrompt      String?   @default("You are a helpful sales assistant.")
+  
+  // Usage Tracking
+  monthlyTokensUsed Int       @default(0)
+  monthlyTokenLimit Int       @default(100000)
+  lastResetAt       DateTime  @default(now())
+  
+  // Relations
+  tenant            Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("ai_settings")
+}
+
+model LeadScore {
+  id              String   @id @default(cuid())
+  tenantId        String
+  contactId       String   @unique
+  userId          String
+  
+  // Scores (0-100)
+  overallScore    Int      @default(0)
+  engagementScore Int      @default(0) // Opens, clicks, replies
+  intentScore     Int      @default(0) // AI-detected buying intent
+  demographicScore Int     @default(0) // Profile completeness
+  
+  // Factors
+  factors         String   @default("{}") // JSON - breakdown of score components
+  lastActivityAt  DateTime @default(now())
+  
+  // Classification
+  tier            LeadTier @default(COLD)
+  
+  // Relations
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tenant          Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId, overallScore])
+  @@map("lead_scores")
+}
+
+model Conversation {
+  id              String   @id @default(cuid())
+  tenantId        String
+  userId          String
+  contactId       String
+  channel         Channel
+  
+  // Conversation State
+  status          ConversationStatus @default(ACTIVE)
+  context         String   @default("{}") // JSON - conversation memory
+  lastMessageAt   DateTime @default(now())
+  messageCount    Int      @default(0)
+  
+  // AI Handling
+  aiEnabled       Boolean  @default(true)
+  aiHandoffAt     DateTime? // When human took over
+  
+  // Relations
+  tenant          Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact         Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages        ChatMessage[]
+
+  @@index([tenantId])
+  @@index([userId, status])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  
+  // Message Details
+  content         String
+  direction       MessageDirection // inbound, outbound
+  senderType      SenderType       // ai, human, contact
+  
+  // AI Metadata
+  aiGenerated     Boolean  @default(false)
+  intent          String?  // AI-detected intent
+  sentiment       String?  // positive, neutral, negative
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  readAt          DateTime?
+  
+  // Relations
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model DripCampaign {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  
+  // Basic Info
+  name          String
+  description   String?
+  status        DripStatus @default(DRAFT)
+  
+  // Trigger
+  triggerType   DripTrigger @default(MANUAL)
+  triggerTags   String[]   // Tags that trigger this drip
+  
+  // Sequence
+  steps         String     // JSON array of steps [{delay: 1, unit: 'day', template: '...', channel: 'WHATSAPP'}]
+  
+  // Settings
+  exitTags      String[]   // Tags that exit contact from drip
+  maxMessages   Int        @default(10)
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  // Relations
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      DripMessage[]
+
+  @@index([tenantId])
+  @@map("drip_campaigns")
+}
+
+model DripMessage {
+  id              String   @id @default(cuid())
+  dripCampaignId  String
+  contactId       String
+  
+  // Status
+  status          DripMessageStatus @default(SCHEDULED)
+  stepIndex       Int      // Which step in the sequence
+  
+  // Scheduling
+  scheduledAt     DateTime
+  sentAt          DateTime?
+  
+  // Content
+  content         String
+  channel         Channel
+  
+  // Relations
+  dripCampaign    DripCampaign @relation(fields: [dripCampaignId], references: [id], onDelete: Cascade)
+  contact         Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([dripCampaignId, status])
+  @@map("drip_messages")
+}
+
+model LeadCaptureForm {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  
+  // Form Settings
+  name          String
+  title         String   @default("Get in Touch")
+  description   String?
+  
+  // Fields
+  fields        String   // JSON - form field configuration
+  
+  // AI Settings
+  aiEnabled     Boolean  @default(true)
+  aiPrompt      String?  // Custom AI prompt for qualification
+  
+  // Styling
+  primaryColor  String   @default("#0070f3")
+  logoUrl       String?
+  
+  // Behavior
+  webhookUrl    String?  // External webhook on submission
+  redirectUrl   String?  // Redirect after submission
+  
+  // Tracking
+  submissions   Int      @default(0)
+  conversions   Int      @default(0)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("lead_capture_forms")
+}
+
+model VoiceCall {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  contactId     String
+  
+  // Call Details
+  phoneNumber   String
+  status        CallStatus @default(SCHEDULED)
+  direction     CallDirection @default(OUTBOUND)
+  
+  // AI Configuration
+  script        String?    // AI conversation script
+  aiVoice       String     @default("alloy") // OpenAI voice
+  
+  // Timestamps
+  scheduledAt   DateTime
+  startedAt     DateTime?
+  endedAt       DateTime?
+  duration      Int?       // Seconds
+  
+  // Results
+  recordingUrl  String?
+  transcript    String?
+  summary       String?    // AI-generated call summary
+  outcome       CallOutcome?
+  
+  createdAt     DateTime   @default(now())
+
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact       Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("voice_calls")
+}
+
+model Template {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  userId        String?  // null = public template
+  
+  // Template Info
+  name          String
+  description   String?
+  category      TemplateCategory @default(GENERAL)
+  channel       Channel
+  
+  // Content
+  content       String
+  variables     String[] // Extracted variables
+  
+  // AI Features
+  aiOptimized   Boolean  @default(false)
+  aiPrompt      String?  // Prompt used to generate this
+  
+  // Marketplace
+  isPublic      Boolean  @default(false)
+  isPremium     Boolean  @default(false)
+  price         Decimal? @db.Decimal(10, 2)
+  downloads     Int      @default(0)
+  rating        Float    @default(0)
+  
+  // Relations
+  tenant        Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("templates")
+}
+
+// ==================== TEAM & COLLABORATION ====================
+
+model Team {
+  id            String   @id @default(cuid())
+  ownerId       String
+  
+  // Team Info
+  name          String
+  slug          String   @unique
+  logoUrl       String?
+  
+  // Billing
+  plan          Plan     @default(STARTER)
+  seats         Int      @default(5)
+  
+  // Relations
+  owner         User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       TeamMember[]
+  
+  createdAt     DateTime @default(now())
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id            String   @id @default(cuid())
+  teamId        String
+  userId        String
+  
+  // Role & Permissions
+  role          TeamRole @default(MEMBER)
+  permissions   String[] // Custom permissions array
+  
+  // Invitations
+  inviteEmail   String?  // For pending invites
+  inviteToken   String?  @unique
+  invitedAt     DateTime?
+  joinedAt      DateTime @default(now())
+  
+  // Relations
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+// ==================== WHITE-LABEL (AGENCY) ====================
+
+model WhiteLabelConfig {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  
+  // Branding
+  brandName     String
+  logoUrl       String?
+  faviconUrl    String?
+  primaryColor  String   @default("#0070f3")
+  
+  // Domain
+  customDomain  String?  @unique
+  domainVerified Boolean @default(false)
+  
+  // Content
+  customCss     String?
+  footerText    String?
+  supportEmail  String?
+  
+  // Features
+  hidePoweredBy Boolean  @default(true)
+  customTosUrl  String?
+  customPrivacyUrl String?
+  
+  // Agency Settings
+  isReseller    Boolean  @default(false)
+  commissionRate Decimal  @db.Decimal(5, 2) @default(20.00)
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("white_label_configs")
+}
+
+// ==================== ANALYTICS & BILLING ====================
+
+model UsageRecord {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  
+  // Period
+  month         Int      // 1-12
+  year          Int
+  
+  // Usage
+  messagesSent  Int      @default(0)
+  messagesLimit Int      // Based on plan
+  overageCount  Int      @default(0)
+  overageCost   Decimal  @db.Decimal(10, 2) @default(0)
+  
+  // AI Usage
+  aiTokensUsed  Int      @default(0)
+  aiCost        Decimal  @db.Decimal(10, 4) @default(0)
+  
+  // Voice Usage
+  voiceMinutes  Int      @default(0)
+  voiceCost     Decimal  @db.Decimal(10, 2) @default(0)
+  
+  // Relations
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@unique([userId, month, year])
+  @@map("usage_records")
+}
+
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  
+  // Event Data
+  eventType     String   // message_sent, lead_captured, call_completed, etc.
+  eventData     String   @default("{}") // JSON
+  
+  // Attribution
+  campaignId    String?
+  contactId     String?
+  channel       Channel?
+  
+  // Value
+  revenue       Decimal? @db.Decimal(10, 2)
+  cost          Decimal? @db.Decimal(10, 4)
+  
+  // Timestamp
+  createdAt     DateTime @default(now())
+
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId, eventType, createdAt])
+  @@map("analytics_events")
+}
+
+// ==================== PAYMENT BOT ====================
+
+model PaymentIntent {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  contactId     String
+  
+  // Payment Details
+  amount        Decimal  @db.Decimal(10, 2)
+  currency      String   @default("USD")
+  description   String?
+  
+  // Status
+  status        PaymentStatus @default(PENDING)
+  
+  // Provider
+  provider      PaymentProvider @default(STRIPE)
+  providerId    String?  // Stripe payment intent ID, Razorpay order ID
+  
+  // Checkout
+  checkoutUrl   String?  // Generated payment link
+  checkoutExpiry DateTime?
+  
+  // Result
+  paidAt        DateTime?
+  paidAmount    Decimal? @db.Decimal(10, 2)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact       Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("payment_intents")
+}
+
+// ==================== ENUMS ====================
+
+enum Plan {
+  FREE
+  STARTER
+  GROWTH
+  PRO
+  ENTERPRISE
+  AGENCY
+}
+
+enum Channel {
+  WHATSAPP
+  EMAIL
+  TELEGRAM
+  SMS
+  VOICE
+}
+
+enum ContactStatus {
+  ACTIVE
+  UNSUBSCRIBED
+  BOUNCED
+  COLD
+  WARM
+  HOT
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum ScheduleType {
+  IMMEDIATE
+  SCHEDULED
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum AIProvider {
+  OPENAI
+  OLLAMA
+  ANTHROPIC
+  CUSTOM
+}
+
+enum LeadTier {
+  COLD
+  WARM
+  HOT
+  CUSTOMER
+}
+
+enum ConversationStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+  ARCHIVED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SenderType {
+  AI
+  HUMAN
+  CONTACT
+  SYSTEM
+}
+
+enum DripStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum DripTrigger {
+  MANUAL
+  TAG_ADDED
+  FORM_SUBMITTED
+  LEAD_SCORE
+}
+
+enum DripMessageStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum CallStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallOutcome {
+  QUALIFIED
+  NOT_QUALIFIED
+  CALLBACK
+  NO_INTEREST
+  APPOINTMENT_SET
+  SALE
+}
+
+enum TemplateCategory {
+  GENERAL
+  WELCOME
+  FOLLOW_UP
+  PROMOTIONAL
+  APPOINTMENT
+  PAYMENT
+  SUPPORT
+  SALES
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+enum PaymentStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  STRIPE
+  RAZORPAY
+  PAYPAL
+  CASHFREE
+}
+
+// ==================== ADMIN & BILLING MODELS ====================
+
+model Subscription {
+  id              String    @id @default(cuid())
+  tenantId        String
+  userId          String    @unique
+  plan            Plan      @default(FREE)
+  status          SubscriptionStatus @default(TRIAL)
+  trialEndsAt     DateTime?
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean @default(false)
+  stripeCustomerId   String?
+  stripeSubscriptionId String?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant          Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices        Invoice[]
+  
+  @@index([tenantId])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id              String    @id @default(cuid())
+  subscriptionId  String
+  amount          Decimal   @db.Decimal(10, 2)
+  currency        String    @default("USD")
+  status          InvoiceStatus @default(PENDING)
+  stripeInvoiceId String?
+  pdfUrl          String?
+  createdAt       DateTime  @default(now())
+  paidAt          DateTime?
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  @@map("invoices")
+}
+
+model PaymentGateway {
+  id           String   @id @default(cuid())
+  name         String
+  provider     String
+  publicKey    String
+  secretKey    String
+  webhookSecret String?
+  isActive     Boolean  @default(true)
+  isDefault    Boolean  @default(false)
+  currency     String   @default("USD")
+  region       String   @default("global")
+  config       String?  // Encrypted JSON
+  createdAt    DateTime @default(now())
+  
+  @@map("payment_gateways")
+}
+
+model SystemSetting {
+  key         String   @id
+  value       String
+  category    String
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+  
+  @@map("system_settings")
+}
+
+model AdminAction {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  targetType  String
+  targetId    String
+  reason      String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+  admin       User     @relation("AdminActions", fields: [adminId], references: [id], onDelete: Cascade)
+  
+  @@map("admin_actions")
+}
+
+// Admin & Billing Enums
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+  VOID
+}

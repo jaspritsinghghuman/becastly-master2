@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+frontend/node_modules
+
+# Build outputs
+dist
+frontend/.next
+frontend/out
+frontend/build
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Version control
+.git
+.gitignore
+.github
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Documentation
+*.md
+!README.md
+
+# Backup files
+*.sql
+*.sql.gz
+backups/
+
+# Docker files (avoid recursion)
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Scripts that aren't needed in container
+deploy*.sh
+backup*.sh
+*.sh

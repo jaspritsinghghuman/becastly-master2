@@ -1,0 +1,101 @@
+# Coolify Deployment Configuration
+# This file tells Coolify how to build and deploy Becastly
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NPM_CONFIG_LEGACY_PEER_DEPS=true
+    container_name: becastly-api
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - API_PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-becastly}:${POSTGRES_PASSWORD:-becastly}@postgres:5432/${POSTGRES_DB:-becastly}
+      - REDIS_URL=redis://redis:6379
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - APP_URL=${COOLIFY_URL:-http://localhost}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - becastly-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NPM_CONFIG_LEGACY_PEER_DEPS=true
+    container_name: becastly-worker
+    restart: always
+    command: npm run worker
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-becastly}:${POSTGRES_PASSWORD:-becastly}@postgres:5432/${POSTGRES_DB:-becastly}
+      - REDIS_URL=redis://redis:6379
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - api
+    networks:
+      - becastly-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NPM_CONFIG_LEGACY_PEER_DEPS=true
+    container_name: becastly-frontend
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${COOLIFY_URL:-http://localhost}/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - becastly-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: becastly-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-becastly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-becastly}
+      POSTGRES_DB: ${POSTGRES_DB:-becastly}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - becastly-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: becastly-redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - becastly-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  becastly-network:
+    driver: bridge

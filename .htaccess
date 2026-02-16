@@ -1,0 +1,24 @@
+# Hostinger .htaccess for Becastly
+# Place this in public_html/
+
+RewriteEngine On
+RewriteBase /
+
+# Redirect HTTP to HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Proxy API requests to backend
+RewriteRule ^api/(.*)$ http://localhost:3001/api/$1 [P,L]
+RewriteRule ^auth/(.*)$ http://localhost:3001/auth/$1 [P,L]
+RewriteRule ^contacts/(.*)$ http://localhost:3001/contacts/$1 [P,L]
+RewriteRule ^campaigns/(.*)$ http://localhost:3001/campaigns/$1 [P,L]
+RewriteRule ^integrations/(.*)$ http://localhost:3001/integrations/$1 [P,L]
+RewriteRule ^webhooks/(.*)$ http://localhost:3001/webhooks/$1 [P,L]
+
+# Proxy frontend requests
+RewriteRule ^(.*)$ http://localhost:3000/$1 [P,L]
+
+# Handle errors
+ErrorDocument 500 /500.html
+ErrorDocument 404 /404.html

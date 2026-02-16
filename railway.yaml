@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: becastly-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    healthcheck:
+      path: /health
+      port: 3001
+    envVars:
+      - name: NODE_ENV
+        value: production
+      - name: API_PORT
+        value: 3001
+      - name: DATABASE_URL
+        value: ${{Postgres.DATABASE_URL}}
+      - name: REDIS_URL
+        value: ${{Redis.REDIS_URL}}
+      - name: ENCRYPTION_KEY
+        generateValue: true
+      - name: APP_URL
+        value: https://becastly-frontend.up.railway.app
+
+  - type: worker
+    name: becastly-worker
+    runtime: node
+    rootDir: .
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run worker
+    envVars:
+      - name: NODE_ENV
+        value: production
+      - name: DATABASE_URL
+        value: ${{Postgres.DATABASE_URL}}
+      - name: REDIS_URL
+        value: ${{Redis.REDIS_URL}}
+      - name: ENCRYPTION_KEY
+        value: ${{becastly-api.ENCRYPTION_KEY}}
+
+  - type: web
+    name: becastly-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - name: NEXT_PUBLIC_API_URL
+        value: https://becastly-api.up.railway.app
+
+databases:
+  - type: postgres
+    name: Postgres
+  - type: redis
+    name: Redis
