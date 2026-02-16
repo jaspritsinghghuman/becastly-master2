@@ -62,6 +62,10 @@ model User {
   conversations Conversation[]
   dripCampaigns DripCampaign[]
   templates    Template[]
+  leadCaptureForms LeadCaptureForm[]
+  voiceCalls   VoiceCall[]
+  analyticsEvents AnalyticsEvent[]
+  paymentIntents  PaymentIntent[]
   
   // Team & Collaboration
   ownedTeams   Team[]        @relation("TeamOwner")
@@ -120,6 +124,8 @@ model Contact {
   messages    Message[]
   conversations Conversation[]
   dripMessages DripMessage[]
+  voiceCalls   VoiceCall[]
+  paymentIntents PaymentIntent[]
 
   @@index([tenantId])
   @@index([userId])
