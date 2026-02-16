@@ -15,7 +15,12 @@ const sendMessageSchema = z.object({
 // Dashboard stats
 async function getDashboardStats(userId: string) {
   const { prisma } = await import('../../lib/prisma');
-  
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const [
     totalContacts,
     totalCampaigns,
@@ -24,19 +29,19 @@ async function getDashboardStats(userId: string) {
     messagesDelivered,
     messagesFailed,
   ] = await Promise.all([
-    prisma.contact.count({ where: { userId } }),
-    prisma.campaign.count({ where: { userId } }),
+    prisma.contact.count({ where: { tenantId: user.tenantId, userId } }),
+    prisma.campaign.count({ where: { tenantId: user.tenantId, userId } }),
     prisma.message.count({
-      where: { campaign: { userId } },
+      where: { tenantId: user.tenantId, campaign: { userId } },
     }),
     prisma.message.count({
-      where: { campaign: { userId }, status: 'SENT' },
+      where: { tenantId: user.tenantId, campaign: { userId }, status: 'SENT' },
     }),
     prisma.message.count({
-      where: { campaign: { userId }, status: 'DELIVERED' },
+      where: { tenantId: user.tenantId, campaign: { userId }, status: 'DELIVERED' },
     }),
     prisma.message.count({
-      where: { campaign: { userId }, status: 'FAILED' },
+      where: { tenantId: user.tenantId, campaign: { userId }, status: 'FAILED' },
     }),
   ]);
 

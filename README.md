@@ -1,6 +1,6 @@
 # Becastly - Multi-Channel Marketing Platform
 
-A powerful WhatsApp, Email, Telegram, and SMS marketing platform built with Next.js, Fastify, and Prisma.
+A powerful **multi-tenant** WhatsApp, Email, Telegram, and SMS marketing platform built with Next.js, Fastify, and Prisma.
 
 ## Features
 
@@ -8,7 +8,9 @@ A powerful WhatsApp, Email, Telegram, and SMS marketing platform built with Next
 - 👥 **Contact Management**: Import, organize, and segment your contacts
 - 📊 **Campaign Management**: Create, schedule, and track marketing campaigns
 - 📈 **Analytics**: Real-time delivery tracking and campaign statistics
-- 🔐 **Secure**: Session-based authentication with encrypted credentials
+- 🏢 **Multi-Tenant**: Each organization (tenant) has isolated users, contacts, campaigns, and usage
+- 🔐 **Secure**: JWT-based authentication (access + refresh tokens) with encrypted credentials
+- 🛡️ **Compliance Sending Engine**: Randomized delays, daily quotas, and per-contact cooldowns to respect provider limits
 - 🎨 **Modern UI**: Built with Tailwind CSS and shadcn/ui
 
 ## Quick Start
@@ -43,8 +45,8 @@ sudo bash install-ubuntu24.sh
 #### Step 1: Clone Repository
 
 ```bash
-git clone https://github.com/jaspritsinghghuman/becastly.git
-cd becastly
+git clone https://github.com/jaspritsinghghuman/becastly-master2.git
+cd becastly-master2
 ```
 
 #### Step 2: Create Environment File
@@ -53,16 +55,19 @@ cd becastly
 cp .env.example .env
 ```
 
-Edit `.env` with your settings:
+Edit `.env` with your settings (see `.env.example` for full comments). At minimum:
 
 ```env
-# Required
-POSTGRES_USER=becastly
-POSTGRES_PASSWORD=your_secure_password
-POSTGRES_DB=becastly
-ENCRYPTION_KEY=$(openssl rand -hex 32)
+# Backend
+DATABASE_URL=postgresql://username:password@postgres:5432/becastly
 APP_URL=http://your-server-ip
-NEXT_PUBLIC_API_URL=http://your-server-ip
+API_PORT=3001
+ENCRYPTION_KEY=$(openssl rand -hex 32)
+REDIS_URL=redis://redis:6379
+
+# JWT (auth)
+JWT_SECRET=$(openssl rand -hex 32)
+JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 ```
 
 #### Step 3: Create Frontend Environment
@@ -131,12 +136,14 @@ docker-compose down
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `POSTGRES_USER` | Database username | `becastly` |
-| `POSTGRES_PASSWORD` | Database password | `secure_password` |
-| `POSTGRES_DB` | Database name | `becastly` |
-| `ENCRYPTION_KEY` | 32-char hex key for encryption | `a1b2c3d4...` |
-| `APP_URL` | Your server URL | `http://10.0.0.5` |
-| `NEXT_PUBLIC_API_URL` | API URL for browser (no /api suffix) | `http://10.0.0.5` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@postgres:5432/becastly` |
+| `ENCRYPTION_KEY` | 32+ char key for encryption | `a1b2c3d4...` |
+| `APP_URL` | Your server URL (frontend origin) | `http://10.0.0.5` |
+| `API_PORT` | API port | `3001` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
+| `JWT_SECRET` | JWT access-token secret | random 32+ chars |
+| `JWT_REFRESH_SECRET` | JWT refresh-token secret | random 32+ chars |
+| `NEXT_PUBLIC_API_URL` | API URL for browser (no /api suffix) | `http://10.0.0.5:3001` |
 
 #### Optional (Integrations)
 

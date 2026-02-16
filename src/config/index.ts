@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import crypto from 'crypto';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
@@ -25,6 +26,24 @@ if (!parsed.success && process.env.NODE_ENV === 'production') {
 
 const env = parsed.success ? parsed.data : (process.env as any);
 
+function ensureJwtSecret(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET'): string {
+  let value = process.env[key];
+
+  if (!value && process.env.NODE_ENV !== 'production') {
+    // Auto-generate for development/test to simplify setup
+    value = crypto.randomBytes(32).toString('hex');
+    process.env[key] = value;
+    // eslint-disable-next-line no-console
+    console.warn(`[config] Auto-generated ${key} for ${process.env.NODE_ENV} environment.`);
+  }
+
+  if (!value && process.env.NODE_ENV === 'production') {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+
+  return value as string;
+}
+
 export const config = {
   app: {
     url: env.APP_URL as string,
@@ -39,8 +58,8 @@ export const config = {
   },
   security: {
     encryptionKey: env.ENCRYPTION_KEY as string,
-    jwtSecret: (env.JWT_SECRET as string) || '',
-    jwtRefreshSecret: (env.JWT_REFRESH_SECRET as string) || '',
+    jwtSecret: ensureJwtSecret('JWT_SECRET'),
+    jwtRefreshSecret: ensureJwtSecret('JWT_REFRESH_SECRET'),
   },
 };
 

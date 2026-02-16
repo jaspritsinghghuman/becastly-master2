@@ -233,9 +233,10 @@ export async function processMessage(messageId: string) {
     data: { status: 'QUEUED' },
   });
 
-  // Get integration
+  // Get integration (tenant-scoped)
   const integration = await prisma.integration.findFirst({
     where: {
+      tenantId: message.tenantId,
       userId: message.campaign.userId,
       channel: message.channel,
       isActive: true,
@@ -286,9 +287,15 @@ export async function sendSingleMessage(
 ) {
   const { channel, to, content, subject } = data;
 
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   // Get integration
   const integration = await prisma.integration.findFirst({
     where: {
+      tenantId: user.tenantId,
       userId,
       channel,
       isActive: true,

@@ -24,9 +24,14 @@ export async function getContacts(userId: string, options: {
   page?: number;
   limit?: number;
 }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const { search, tags, status, page = 1, limit = 50 } = options;
 
-  const where: any = { userId };
+  const where: any = { tenantId: user.tenantId, userId };
 
   if (search) {
     where.OR = [
@@ -102,8 +107,13 @@ export async function createContact(userId: string, data: ContactInput) {
 }
 
 export async function updateContact(userId: string, contactId: string, data: Partial<ContactInput>) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const contact = await prisma.contact.findFirst({
-    where: { id: contactId, userId },
+    where: { id: contactId, userId, tenantId: user.tenantId },
   });
 
   if (!contact) {
@@ -117,8 +127,13 @@ export async function updateContact(userId: string, contactId: string, data: Par
 }
 
 export async function deleteContact(userId: string, contactId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const contact = await prisma.contact.findFirst({
-    where: { id: contactId, userId },
+    where: { id: contactId, userId, tenantId: user.tenantId },
   });
 
   if (!contact) {
@@ -225,11 +240,16 @@ async function processImportData(
 }
 
 export async function getContactStats(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const [total, active, unsubscribed, bounced] = await Promise.all([
-    prisma.contact.count({ where: { userId } }),
-    prisma.contact.count({ where: { userId, status: 'ACTIVE' } }),
-    prisma.contact.count({ where: { userId, status: 'UNSUBSCRIBED' } }),
-    prisma.contact.count({ where: { userId, status: 'BOUNCED' } }),
+    prisma.contact.count({ where: { tenantId: user.tenantId, userId } }),
+    prisma.contact.count({ where: { tenantId: user.tenantId, userId, status: 'ACTIVE' } }),
+    prisma.contact.count({ where: { tenantId: user.tenantId, userId, status: 'UNSUBSCRIBED' } }),
+    prisma.contact.count({ where: { tenantId: user.tenantId, userId, status: 'BOUNCED' } }),
   ]);
 
   return { total, active, unsubscribed, bounced };

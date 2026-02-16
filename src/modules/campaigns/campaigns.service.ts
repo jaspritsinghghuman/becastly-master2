@@ -26,9 +26,14 @@ export async function getCampaigns(userId: string, options: {
   page?: number;
   limit?: number;
 }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const { status, channel, page = 1, limit = 20 } = options;
 
-  const where: any = { userId };
+  const where: any = { tenantId: user.tenantId, userId };
 
   if (status) {
     where.status = status;
@@ -69,8 +74,13 @@ export async function getCampaigns(userId: string, options: {
 }
 
 export async function getCampaign(userId: string, campaignId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
     include: {
       _count: {
         select: {
@@ -155,8 +165,13 @@ export async function createCampaign(userId: string, data: CreateCampaignInput) 
 }
 
 export async function updateCampaign(userId: string, campaignId: string, data: Partial<CreateCampaignInput>) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
   });
 
   if (!campaign) {
@@ -180,8 +195,13 @@ export async function updateCampaign(userId: string, campaignId: string, data: P
 }
 
 export async function deleteCampaign(userId: string, campaignId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
   });
 
   if (!campaign) {
@@ -200,8 +220,13 @@ export async function deleteCampaign(userId: string, campaignId: string) {
 }
 
 export async function startCampaign(userId: string, campaignId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
     include: {
       user: true,
     },
@@ -220,7 +245,7 @@ export async function startCampaign(userId: string, campaignId: string) {
   }
 
   // Get target contacts
-  const where: any = { userId, status: 'ACTIVE' };
+  const where: any = { tenantId: user.tenantId, userId, status: 'ACTIVE' };
   
   if (campaign.tagFilter.length > 0) {
     where.tags = { hasSome: campaign.tagFilter };
@@ -247,6 +272,7 @@ export async function startCampaign(userId: string, campaignId: string) {
   // Check integration
   const integration = await prisma.integration.findFirst({
     where: {
+      tenantId: user.tenantId,
       userId,
       channel: campaign.channel,
       isActive: true,
@@ -303,8 +329,13 @@ export async function startCampaign(userId: string, campaignId: string) {
 }
 
 export async function pauseCampaign(userId: string, campaignId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
   });
 
   if (!campaign) {
@@ -324,8 +355,13 @@ export async function pauseCampaign(userId: string, campaignId: string) {
 }
 
 export async function resumeCampaign(userId: string, campaignId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('User not found');
+  }
+
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, userId },
+    where: { id: campaignId, userId, tenantId: user.tenantId },
   });
 
   if (!campaign) {
