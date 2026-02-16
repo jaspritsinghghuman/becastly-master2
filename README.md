@@ -15,26 +15,9 @@ A powerful **multi-tenant** WhatsApp, Email, Telegram, and SMS marketing platfor
 
 ## Quick Start
 
-### One-Line Installation (Ubuntu 24.04)
+### Option A: Docker (recommended)
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/jaspritsinghghuman/becastly/master/install-ubuntu24.sh | sudo bash
-```
-
-Or download and run manually:
-
-```bash
-# 1. Download the installer
-wget https://raw.githubusercontent.com/jaspritsinghghuman/becastly/master/install-ubuntu24.sh
-
-# 2. Make it executable
-chmod +x install-ubuntu24.sh
-
-# 3. Run it
-sudo bash install-ubuntu24.sh
-```
-
-### Manual Installation
+This starts Postgres, Redis, API, worker, Nginx, and the Next.js frontend with one command.
 
 #### Prerequisites
 
@@ -98,6 +81,69 @@ docker-compose exec api npx prisma migrate deploy
 #### Step 7: Access Application
 
 Open http://your-server-ip/auth/register in your browser and create your account.
+
+> In development mode (NODE_ENV != production), `JWT_SECRET` and `JWT_REFRESH_SECRET`
+> are auto-generated at runtime if missing. In production they **must** be set.
+
+---
+
+### Option B: Local development (without Docker)
+
+Use this if you want hot-reload on API and frontend during development.
+
+#### Prerequisites
+
+- Node.js 18+
+- PostgreSQL running locally
+- Redis running locally
+
+#### 1. Backend env
+
+From the project root:
+
+```bash
+cp .env.example .env
+```
+
+Set at least:
+
+```env
+DATABASE_URL=postgresql://postgres:password@localhost:5432/becastly
+APP_URL=http://localhost:3000
+API_PORT=3001
+ENCRYPTION_KEY=$(openssl rand -hex 32)
+REDIS_URL=redis://localhost:6379
+
+# (Optional in dev – will auto-generate if missing)
+JWT_SECRET=
+JWT_REFRESH_SECRET=
+```
+
+#### 2. Backend install & migrate
+
+```bash
+npm install
+npx prisma migrate dev
+npm run dev          # API on http://localhost:3001
+```
+
+To run workers (for campaigns, queues) in another terminal:
+
+```bash
+npm run build
+npm run worker
+```
+
+#### 3. Frontend dev
+
+```bash
+cd frontend
+npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > .env.local
+npm run dev          # Frontend on http://localhost:3000
+```
+
+Then open `http://localhost:3000/auth/register` to create your first account.
 
 ## Docker Deployment
 
